@@ -8,6 +8,10 @@
 	if ([hitTestResult isKindOfClass:[UIWindow class]]) {
 		return nil;
 	}
+    
+    if ( UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad && [[hitTestResult class] isEqual:[UIView class]]) {
+        return nil;
+    }
 	
 	return hitTestResult;
 }
