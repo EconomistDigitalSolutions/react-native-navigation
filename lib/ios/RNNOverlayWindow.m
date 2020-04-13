@@ -5,7 +5,7 @@
 - (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
 	UIView *hitTestResult = [super hitTest:point withEvent:event];
 
-	if ( UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad && [[hitTestResult class] isEqual:[UIView class]]) {
+	if ([hitTestResult isKindOfClass:[UIWindow class]] || [hitTestResult isMemberOfClass:UIView.class]) {
         return nil;
     }
 	
