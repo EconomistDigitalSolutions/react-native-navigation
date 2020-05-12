@@ -1,6 +1,8 @@
 #import <XCTest/XCTest.h>
+#import <OCMock/OCMock.h>
 #import "RNNModalManager.h"
 #import "RNNComponentViewController.h"
+#import "RNNStackController.h"
 
 @interface MockViewController : UIViewController
 
@@ -41,6 +43,9 @@
 	_vc1 = [RNNComponentViewController new];
 	_vc2 = [RNNComponentViewController new];
 	_vc3 = [RNNComponentViewController new];
+	_vc1.layoutInfo = [RNNLayoutInfo new];
+	_vc2.layoutInfo = [RNNLayoutInfo new];
+	_vc3.layoutInfo = [RNNLayoutInfo new];
 	_modalManager = [[MockModalManager alloc] init];
 	_modalManager.topPresentedVC = [MockViewController new];
 }
@@ -105,6 +110,65 @@
 - (void)testShowModal_CallPresentViewController {
 	[_modalManager showModal:_vc1 animated:NO completion:nil];
 	XCTAssertTrue(_modalManager.topPresentedVC.presentViewControllerCalls == 1);
+}
+
+- (void)testDismissModal_ShouldInvokeDelegateDismissedModal {
+	id mockDelegate = [OCMockObject mockForProtocol:@protocol(RNNModalManagerDelegate)];
+	_modalManager.delegate = mockDelegate;
+	[_modalManager showModal:_vc1 animated:NO completion:nil];
+	
+	[[mockDelegate expect] dismissedModal:_vc1];
+	[_modalManager dismissModal:_vc1 completion:nil];
+	[mockDelegate verify];
+}
+
+- (void)testPresentationControllerDidDismiss_ShouldInvokeDelegateDismissedModal {
+	id mockDelegate = [OCMockObject mockForProtocol:@protocol(RNNModalManagerDelegate)];
+	_modalManager.delegate = mockDelegate;
+	
+	UIPresentationController* presentationController = [[UIPresentationController alloc] initWithPresentedViewController:_vc2 presentingViewController:_vc1];
+	
+	[[mockDelegate expect] dismissedModal:_vc2];
+	[_modalManager presentationControllerDidDismiss:presentationController];
+	[mockDelegate verify];
+}
+
+- (void)testPresentationControllerDidDismiss_ShouldInvokeDelegateDismissedModalWithPresentedChild {
+	id mockDelegate = [OCMockObject mockForProtocol:@protocol(RNNModalManagerDelegate)];
+	_modalManager.delegate = mockDelegate;
+	RNNStackController* nav = [[RNNStackController alloc] initWithRootViewController:_vc2];
+	
+	UIPresentationController* presentationController = [[UIPresentationController alloc] initWithPresentedViewController:nav presentingViewController:_vc1];
+	
+	[[mockDelegate expect] dismissedModal:_vc2];
+	[_modalManager presentationControllerDidDismiss:presentationController];
+	[mockDelegate verify];
+}
+
+- (void)testApplyOptionsOnInit_shouldShowModalWithDefaultPresentationStyle {
+	_vc1.options = [RNNNavigationOptions emptyOptions];
+	[_modalManager showModal:_vc1 animated:NO completion:nil];
+	XCTAssertEqual(_vc1.modalPresentationStyle, UIModalPresentationPageSheet);
+}
+
+- (void)testApplyOptionsOnInit_shouldShowModalWithDefaultTransitionStyle {
+	_vc1.options = [RNNNavigationOptions emptyOptions];
+	[_modalManager showModal:_vc1 animated:NO completion:nil];
+	XCTAssertEqual(_vc1.modalTransitionStyle, UIModalTransitionStyleCoverVertical);
+}
+
+- (void)testApplyOptionsOnInit_shouldShowModalWithPresentationStyle {
+	_vc1.options = [RNNNavigationOptions emptyOptions];
+	_vc1.options.modalPresentationStyle = [Text withValue:@"overCurrentContext"];
+	[_modalManager showModal:_vc1 animated:NO completion:nil];
+	XCTAssertEqual(_vc1.modalPresentationStyle, UIModalPresentationOverCurrentContext);
+}
+
+- (void)testApplyOptionsOnInit_shouldShowModalWithTransitionStyle {
+	_vc1.options = [RNNNavigationOptions emptyOptions];
+	_vc1.options.modalTransitionStyle = [Text withValue:@"crossDissolve"];
+	[_modalManager showModal:_vc1 animated:NO completion:nil];
+	XCTAssertEqual(_vc1.modalTransitionStyle, UIModalTransitionStyleCrossDissolve);
 }
 
 #pragma mark RNNModalManagerDelegate

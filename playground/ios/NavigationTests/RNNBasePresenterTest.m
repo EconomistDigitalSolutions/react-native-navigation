@@ -2,9 +2,9 @@
 #import "RNNBasePresenter.h"
 #import <OCMock/OCMock.h>
 #import "UIViewController+RNNOptions.h"
-#import "RNNComponentViewController.h"
+#import "RNNComponentViewController+Utils.h"
 
-@interface RNNBottomTabPresenterTest : XCTestCase
+@interface RNNBasePresenterTest : XCTestCase
 
 @property(nonatomic, strong) RNNBasePresenter *uut;
 @property(nonatomic, strong) RNNNavigationOptions *options;
@@ -13,14 +13,14 @@
 
 @end
 
-@implementation RNNBottomTabPresenterTest
+@implementation RNNBasePresenterTest
 
 - (void)setUp {
     [super setUp];
-    self.uut = [[RNNBasePresenter alloc] init];
-    self.boundViewController = [RNNComponentViewController new];
+    self.uut = [[RNNBasePresenter alloc] initWithDefaultOptions:[[RNNNavigationOptions alloc] initEmptyOptions]];
+    self.boundViewController = [RNNComponentViewController createWithComponentId:@"componentId" initialOptions:[RNNNavigationOptions emptyOptions]];
     self.mockBoundViewController = [OCMockObject partialMockForObject:self.boundViewController];
-    [self.uut boundViewController:self.mockBoundViewController];
+	[self.uut bindViewController:self.mockBoundViewController];
     self.options = [[RNNNavigationOptions alloc] initEmptyOptions];
 }
 
@@ -36,16 +36,8 @@
     [self.mockBoundViewController verify];
 }
 
-- (void)testApplyOptions_shouldSetTabBarItemBadgeWithValue {
-    OCMStub([self.mockBoundViewController parentViewController]).andReturn([UITabBarController new]);
-    self.options.bottomTab.badge = [[Text alloc] initWithValue:@"badge"];
-    [[self.mockBoundViewController expect] setTabBarItemBadge:self.options.bottomTab.badge.get];
-    [self.uut applyOptions:self.options];
-    [self.mockBoundViewController verify];
-}
-
 - (void)testApplyOptions_setTabBarItemBadgeShouldNotCalledOnUITabBarController {
-    [self.uut boundViewController:self.mockBoundViewController];
+    [self.uut bindViewController:self.mockBoundViewController];
     self.options.bottomTab.badge = [[Text alloc] initWithValue:@"badge"];
     [[self.mockBoundViewController reject] setTabBarItemBadge:[[RNNBottomTabOptions alloc] initWithDict:@{@"badge": @"badge"}]];
     [self.uut applyOptions:self.options];
@@ -53,7 +45,7 @@
 }
 
 - (void)testApplyOptions_setTabBarItemBadgeShouldWhenNoValue {
-    [self.uut boundViewController:self.mockBoundViewController];
+    [self.uut bindViewController:self.mockBoundViewController];
     self.options.bottomTab.badge = nil;
     [[self.mockBoundViewController reject] setTabBarItemBadge:[OCMArg any]];
     [self.uut applyOptions:self.options];
@@ -61,33 +53,74 @@
 }
 
 - (void)testGetPreferredStatusBarStyle_returnLightIfLight {
-    RNNNavigationOptions * lightOptions = [[RNNNavigationOptions alloc] initEmptyOptions];
-    lightOptions.statusBar.style = [[Text alloc] initWithValue:@"light"];
-
-    XCTAssertEqual([_uut getStatusBarStyle:lightOptions], UIStatusBarStyleLightContent);
+	self.boundViewController.options.statusBar.style = [[Text alloc] initWithValue:@"light"];
+	
+    XCTAssertEqual([_uut getStatusBarStyle], UIStatusBarStyleLightContent);
 }
 
-- (void)testGetPreferredStatusBarStyle_returnDefaultIfDark {
-    RNNNavigationOptions * darkOptions = [[RNNNavigationOptions alloc] initEmptyOptions];
-    darkOptions.statusBar.style = [[Text alloc] initWithValue:@"dark"];
+- (void)testGetPreferredStatusBarStyle_returnDark {
+    self.boundViewController.options.statusBar.style = [[Text alloc] initWithValue:@"dark"];
 
-    XCTAssertEqual([_uut getStatusBarStyle:darkOptions], UIStatusBarStyleDefault);
+    XCTAssertEqual([_uut getStatusBarStyle], UIStatusBarStyleDarkContent);
 }
 
 - (void)testGetPreferredStatusBarStyle_returnDefaultIfNil {
-    RNNNavigationOptions * options = [[RNNNavigationOptions alloc] initEmptyOptions];
-
-    XCTAssertEqual([_uut getStatusBarStyle:options], UIStatusBarStyleDefault);
+	self.boundViewController.options.statusBar.style = nil;
+    XCTAssertEqual([_uut getStatusBarStyle], UIStatusBarStyleDefault);
 }
 
 - (void)testGetPreferredStatusBarStyle_considersDefaultOptions {
-    RNNNavigationOptions * options = [[RNNNavigationOptions alloc] initEmptyOptions];
     RNNNavigationOptions * lightOptions = [[RNNNavigationOptions alloc] initEmptyOptions];
     lightOptions.statusBar.style = [[Text alloc] initWithValue:@"light"];
     [_uut setDefaultOptions:lightOptions];
 
-    XCTAssertEqual([_uut getStatusBarStyle:options], UIStatusBarStyleLightContent);
+    XCTAssertEqual([_uut getStatusBarStyle], UIStatusBarStyleLightContent);
 }
 
+- (void)testApplyOptionsOnInit_setSwipeToDismiss {
+    self.options.modal.swipeToDismiss = [[Bool alloc] initWithBOOL:NO];
+	XCTAssertFalse(_boundViewController.modalInPresentation);
+    [self.uut applyOptionsOnInit:self.options];
+	XCTAssertTrue(_boundViewController.modalInPresentation);
+}
+
+- (void)testHidesBottomBarWhenPushed_showsBar {
+	_boundViewController.options.bottomTabs.visible = [[Bool alloc] initWithBOOL:NO];
+	XCTAssertTrue(_boundViewController.hidesBottomBarWhenPushed);
+}
+
+- (void)testHidesBottomBarWhenPushed_hidesBar {
+	_boundViewController.options.bottomTabs.visible = [[Bool alloc] initWithBOOL:YES];
+	XCTAssertFalse(_boundViewController.hidesBottomBarWhenPushed);
+}
+
+- (void)testHidesBottomBarWhenPushed_resolveParentShowsBar {
+	UINavigationController* nvc = [[UINavigationController alloc] initWithRootViewController:self.boundViewController];
+	nvc.options = [RNNNavigationOptions emptyOptions];
+	nvc.options.bottomTabs.visible = [[Bool alloc] initWithBOOL:NO];
+	XCTAssertTrue(_boundViewController.hidesBottomBarWhenPushed);
+}
+
+- (void)testHidesBottomBarWhenPushed_resolveParentHidesBar {
+	UINavigationController* nvc = [[UINavigationController alloc] initWithRootViewController:self.boundViewController];
+	nvc.options = [RNNNavigationOptions emptyOptions];
+	nvc.options.bottomTabs.visible = [[Bool alloc] initWithBOOL:YES];
+	XCTAssertFalse(_boundViewController.hidesBottomBarWhenPushed);
+}
+
+- (void)testHidesBottomBarWhenPushed_resolveChildShowsBarBeforeParent {
+	UINavigationController* nvc = [[UINavigationController alloc] initWithRootViewController:self.boundViewController];
+	nvc.options = [RNNNavigationOptions emptyOptions];
+	nvc.options.bottomTabs.visible = [[Bool alloc] initWithBOOL:NO];
+	XCTAssertTrue(_boundViewController.hidesBottomBarWhenPushed);
+}
+
+- (void)testHidesBottomBarWhenPushed_resolveChildHidesBarBeforeParent {
+	UINavigationController* nvc = [[UINavigationController alloc] initWithRootViewController:self.boundViewController];
+	nvc.options = [RNNNavigationOptions emptyOptions];
+	self.boundViewController.options.bottomTabs.visible = [[Bool alloc] initWithBOOL:NO];
+	nvc.options.bottomTabs.visible = [[Bool alloc] initWithBOOL:YES];
+	XCTAssertTrue(_boundViewController.hidesBottomBarWhenPushed);
+}
 
 @end

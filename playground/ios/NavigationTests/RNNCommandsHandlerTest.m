@@ -8,20 +8,10 @@
 #import <ReactNativeNavigation/RNNErrorHandler.h>
 #import <OCMock/OCMock.h>
 #import "RNNLayoutManager.h"
-
-@interface MockUIApplication : NSObject
-
--(UIWindow *)keyWindow;
-
-@end
-
-@implementation MockUIApplication
-
-- (UIWindow *)keyWindow {
-	return [UIWindow new];
-}
-
-@end
+#import "RNNBottomTabsController.h"
+#import "BottomTabsAttachModeFactory.h"
+#import <ReactNativeNavigation/BottomTabPresenterCreator.h>
+#import "RNNComponentViewController+Utils.h"
 
 @interface MockUINavigationController : RNNStackController
 @property (nonatomic, strong) NSArray* willReturnVCs;
@@ -52,6 +42,7 @@
 @property (nonatomic, strong) id controllerFactory;
 @property (nonatomic, strong) id overlayManager;
 @property (nonatomic, strong) id eventEmmiter;
+@property (nonatomic, strong) id creator;
 
 @end
 
@@ -59,22 +50,33 @@
 
 - (void)setUp {
 	[super setUp];
+	self.creator = [OCMockObject partialMockForObject:[RNNTestRootViewCreator new]];
 	self.mainWindow = [OCMockObject partialMockForObject:[UIWindow new]];
 	self.eventEmmiter = [OCMockObject partialMockForObject:[RNNEventEmitter new]];
 	self.overlayManager = [OCMockObject partialMockForObject:[RNNOverlayManager new]];
 	self.modalManager = [OCMockObject partialMockForObject:[RNNModalManager new]];
-	self.controllerFactory = [OCMockObject partialMockForObject:[[RNNControllerFactory alloc] initWithRootViewCreator:nil eventEmitter:self.eventEmmiter store:nil componentRegistry:nil andBridge:nil]];
-	self.uut = [[RNNCommandsHandler alloc] initWithControllerFactory:self.controllerFactory eventEmitter:self.eventEmmiter stackManager:[RNNNavigationStackManager new] modalManager:self.modalManager overlayManager:self.overlayManager mainWindow:_mainWindow];
-	self.vc1 = [RNNComponentViewController new];
-	self.vc2 = [RNNComponentViewController new];
-	self.vc3 = [RNNComponentViewController new];
+	self.controllerFactory = [OCMockObject partialMockForObject:[[RNNControllerFactory alloc] initWithRootViewCreator:nil eventEmitter:self.eventEmmiter store:nil componentRegistry:nil andBridge:nil bottomTabsAttachModeFactory:[BottomTabsAttachModeFactory new]]];
+	self.uut = [[RNNCommandsHandler alloc] initWithControllerFactory:self.controllerFactory eventEmitter:self.eventEmmiter modalManager:self.modalManager overlayManager:self.overlayManager mainWindow:_mainWindow];
+	self.vc1 = [self generateComponentWithComponentId:@"1"];
+	self.vc2 = [self generateComponentWithComponentId:@"2"];
+	self.vc3 = [self generateComponentWithComponentId:@"3"];
 	_nvc = [[MockUINavigationController alloc] init];
 	[_nvc setViewControllers:@[self.vc1, self.vc2, self.vc3]];
-	OCMStub([self.sharedApplication keyWindow]).andReturn(self.mainWindow);
+	
+	UIApplication* sharedApplication = [OCMockObject niceMockForClass:[UIApplication class]];
+	id mockedApplicationClass = OCMClassMock([UIApplication class]);
+	OCMStub(ClassMethod([mockedApplicationClass sharedApplication])).andReturn(sharedApplication);
+	OCMStub(sharedApplication.keyWindow).andReturn(self.mainWindow);
+	OCMStub([sharedApplication windows]).andReturn(@[self.mainWindow]);
 }
 
+- (RNNComponentViewController *)generateComponentWithComponentId:(NSString *)componentId {
+	RNNLayoutInfo* layoutInfo = [[RNNLayoutInfo alloc] init];
+	layoutInfo.componentId = componentId;
+	return [[RNNComponentViewController alloc] initWithLayoutInfo:layoutInfo rootViewCreator:_creator eventEmitter:nil presenter:[RNNComponentPresenter new] options:[[RNNNavigationOptions alloc] initWithDict:@{}] defaultOptions:nil];
+}
 
-- (void)testAssertReadyForEachMethodThrowsExceptoins {
+- (void)testAssertReadyForEachMethodThrowsExceptions {
 	NSArray* methods = [self getPublicMethodNamesForObject:self.uut];
 	[self.uut setReadyToReceiveCommands:false];
 	for (NSString* methodName in methods) {
@@ -85,15 +87,16 @@
 	}
 }
 
--(NSArray*) getPublicMethodNamesForObject:(NSObject*)obj{
+- (NSArray*)getPublicMethodNamesForObject:(NSObject*)obj {
 	NSMutableArray* skipMethods = [NSMutableArray new];
 	
-	[skipMethods addObject:@"initWithControllerFactory:eventEmitter:stackManager:modalManager:overlayManager:mainWindow:"];
+	[skipMethods addObject:@"initWithControllerFactory:eventEmitter:modalManager:overlayManager:mainWindow:"];
 	[skipMethods addObject:@"assertReady"];
 	[skipMethods addObject:@"setReadyToReceiveCommands:"];
 	[skipMethods addObject:@"readyToReceiveCommands"];
 	[skipMethods addObject:@".cxx_destruct"];
 	[skipMethods addObject:@"dismissedModal:"];
+	[skipMethods addObject:@"attemptedToDismissModal:"];
 	[skipMethods addObject:@"dismissedMultipleModals:"];
 	
 	NSMutableArray* result = [NSMutableArray new];
@@ -118,14 +121,11 @@
 -(void)testDynamicStylesMergeWithStaticStyles {
 	RNNNavigationOptions* initialOptions = [[RNNNavigationOptions alloc] initWithDict:@{}];
 	initialOptions.topBar.title.text = [[Text alloc] initWithValue:@"the title"];
-	RNNLayoutInfo* layoutInfo = [RNNLayoutInfo new];
 	RNNTestRootViewCreator* creator = [[RNNTestRootViewCreator alloc] init];
-	
-	RNNComponentPresenter* presenter = [[RNNComponentPresenter alloc] init];
-	RNNComponentViewController* vc = [[RNNComponentViewController alloc] initWithLayoutInfo:layoutInfo rootViewCreator:creator eventEmitter:nil presenter:presenter options:initialOptions defaultOptions:nil];
+	RNNComponentViewController* vc = [RNNComponentViewController createWithComponentId:@"componentId" initialOptions:initialOptions];
 	
 	RNNStackController* nav = [[RNNStackController alloc] initWithLayoutInfo:nil creator:creator options:[[RNNNavigationOptions alloc] initEmptyOptions] defaultOptions:nil presenter:[[RNNStackPresenter alloc] init] eventEmitter:nil childViewControllers:@[vc]];
-	
+	[self.mainWindow setRootViewController:nav];
 	[vc viewWillAppear:false];
 	XCTAssertTrue([vc.navigationItem.title isEqual:@"the title"]);
 	
@@ -135,16 +135,18 @@
 	UIColor* expectedColor = [UIColor colorWithRed:1 green:0 blue:0 alpha:1];
 	
 	[self.uut mergeOptions:@"componentId" options:dictFromJs completion:^{
-		XCTAssertTrue([vc.navigationItem.title isEqual:@"the title"]);
-		XCTAssertTrue([nav.navigationBar.barTintColor isEqual:expectedColor]);
+		
 	}];
+	
+	XCTAssertTrue([vc.navigationItem.title isEqual:@"the title"]);
+	XCTAssertTrue([vc.navigationItem.standardAppearance.backgroundColor isEqual:expectedColor]);
 }
 
 - (void)testMergeOptions_shouldOverrideOptions {
 	RNNNavigationOptions* initialOptions = [[RNNNavigationOptions alloc] initWithDict:@{}];
 	initialOptions.topBar.title.text = [[Text alloc] initWithValue:@"the title"];
 	
-	RNNComponentPresenter* presenter = [[RNNComponentPresenter alloc] init];
+	RNNComponentPresenter* presenter = [[RNNComponentPresenter alloc] initWithComponentRegistry:nil defaultOptions:nil];
 	RNNComponentViewController* vc = [[RNNComponentViewController alloc] initWithLayoutInfo:nil rootViewCreator:[[RNNTestRootViewCreator alloc] init] eventEmitter:nil presenter:presenter options:initialOptions defaultOptions:nil];
 	
 	__unused RNNStackController* nav = [[RNNStackController alloc] initWithRootViewController:vc];
@@ -182,7 +184,7 @@
 
 - (void)testShowOverlay_withCreatedLayout {
 	[self.uut setReadyToReceiveCommands:true];
-	UIViewController* layoutVC = [RNNComponentViewController new];
+	UIViewController* layoutVC = [self generateComponentWithComponentId:nil];
 	OCMStub([self.controllerFactory createLayout:[OCMArg any]]).andReturn(layoutVC);
 	
 	[[self.overlayManager expect] showOverlayWindow:[OCMArg any]];
@@ -264,9 +266,10 @@
 	[self.uut setReadyToReceiveCommands:true];
 	id classMock = OCMClassMock([RNNLayoutManager class]);
 	OCMStub(ClassMethod([classMock findComponentForId:@"vc1"])).andReturn(_nvc);
+	self.vc2.options.animations.setStackRoot.enable = [[Bool alloc] initWithBOOL:NO];
 	
 	[self.uut setStackRoot:@"vc1" commandId:@"" children:nil completion:^{
-		
+
 	} rejection:^(NSString *code, NSString *message, NSError *error) {
 		
 	}];
@@ -281,8 +284,10 @@
 	OCMStub(ClassMethod([classMock findComponentForId:@"vc1"])).andReturn(_nvc);
 	OCMStub([self.controllerFactory createChildrenLayout:[OCMArg any]]).andReturn(newViewControllers);
 	[self.uut setReadyToReceiveCommands:true];
+	
+	_vc3.options.animations.setStackRoot.enable = [[Bool alloc] initWithBOOL:NO];
 	[self.uut setStackRoot:@"vc1" commandId:@"" children:nil completion:^{
-		
+	
 	} rejection:^(NSString *code, NSString *message, NSError *error) {
 		
 	}];
@@ -302,8 +307,8 @@
 		
 	}];
 	
-	[[vc1Mock expect] renderTreeAndWait:NO perform:[OCMArg any]];
-	[[vc2Mock expect] renderTreeAndWait:NO perform:[OCMArg any]];
+	[[vc1Mock expect] render];
+	[[vc2Mock expect] render];
 }
 
 - (void)testSetStackRoot_waitForRender {
@@ -322,8 +327,8 @@
 		
 	}];
 	
-	[[vc1Mock expect] renderTreeAndWait:NO perform:[OCMArg any]];
-	[[vc2Mock expect] renderTreeAndWait:YES perform:[OCMArg any]];
+	[[vc1Mock expect] render];
+	[[vc2Mock expect] render];
 }
 
 - (void)testSetRoot_waitForRenderTrue {
@@ -334,7 +339,7 @@
 	id mockedVC = [OCMockObject partialMockForObject:self.vc1];
 	OCMStub([self.controllerFactory createLayout:[OCMArg any]]).andReturn(mockedVC);
 	
-	[[mockedVC expect] renderTreeAndWait:YES perform:[OCMArg any]];
+	[[mockedVC expect] render];
 	[self.uut setRoot:@{} commandId:@"" completion:^{}];
 	[mockedVC verify];
 }
@@ -347,9 +352,121 @@
 	id mockedVC = [OCMockObject partialMockForObject:self.vc1];
 	OCMStub([self.controllerFactory createLayout:[OCMArg any]]).andReturn(mockedVC);
 	
-	[[mockedVC expect] renderTreeAndWait:NO perform:[OCMArg any]];
+	[[mockedVC expect] render];
 	[self.uut setRoot:@{} commandId:@"" completion:^{}];
 	[mockedVC verify];
+}
+
+- (void)testSetRoot_withBottomTabsAttachModeTogether {
+	[self.uut setReadyToReceiveCommands:true];
+	RNNNavigationOptions* options = [[RNNNavigationOptions alloc] initEmptyOptions];
+	options.bottomTabs.tabsAttachMode = [[BottomTabsAttachMode alloc] initWithValue:@"together"];
+
+	BottomTabsBaseAttacher* attacher = [[[BottomTabsAttachModeFactory alloc] initWithDefaultOptions:nil] fromOptions:options];
+	RNNBottomTabsController* tabBarController = [[RNNBottomTabsController alloc] initWithLayoutInfo:nil creator:nil options:options defaultOptions:[[RNNNavigationOptions alloc] initEmptyOptions] presenter:[RNNBasePresenter new] bottomTabPresenter:nil dotIndicatorPresenter:nil eventEmitter:_eventEmmiter childViewControllers:@[_vc1, _vc2] bottomTabsAttacher:attacher];
+
+	OCMStub([self.controllerFactory createLayout:[OCMArg any]]).andReturn(tabBarController);
+	
+	[self.uut setRoot:@{} commandId:@"" completion:^{}];
+	XCTAssertTrue(_vc1.isViewLoaded);
+	XCTAssertTrue(_vc2.isViewLoaded);
+	XCTAssertEqual(_vc1.view.tag, 1);
+	XCTAssertEqual(_vc2.view.tag, 2);
+}
+
+- (void)testSetRoot_withBottomTabsAttachModeOnSwitchToTab {
+	[self.uut setReadyToReceiveCommands:true];
+	RNNNavigationOptions* options = [[RNNNavigationOptions alloc] initEmptyOptions];
+	options.bottomTabs.tabsAttachMode = [[BottomTabsAttachMode alloc] initWithValue:@"onSwitchToTab"];
+	options.animations.setRoot.waitForRender = [[Bool alloc] initWithBOOL:YES];
+	
+	BottomTabsBaseAttacher* attacher = [[[BottomTabsAttachModeFactory alloc] initWithDefaultOptions:nil] fromOptions:options];
+	RNNBottomTabsController* tabBarController = [[RNNBottomTabsController alloc] initWithLayoutInfo:nil creator:nil options:options defaultOptions:[[RNNNavigationOptions alloc] initEmptyOptions] presenter:[RNNBasePresenter new] bottomTabPresenter:nil dotIndicatorPresenter:nil eventEmitter:_eventEmmiter childViewControllers:@[_vc1, _vc2] bottomTabsAttacher:attacher];
+
+	OCMStub([self.controllerFactory createLayout:[OCMArg any]]).andReturn(tabBarController);
+	
+	[self.uut setRoot:@{} commandId:@"" completion:^{}];
+	XCTAssertTrue(_vc1.isViewLoaded);
+	XCTAssertFalse(_vc2.isViewLoaded);
+	[tabBarController setSelectedIndex:1];
+	XCTAssertTrue(_vc2.isViewLoaded);
+}
+
+- (void)testSetRoot_withBottomTabsAttachModeAfterInitialTab {
+	[self.uut setReadyToReceiveCommands:true];
+	RNNNavigationOptions* options = [[RNNNavigationOptions alloc] initEmptyOptions];
+	options.bottomTabs.tabsAttachMode = [[BottomTabsAttachMode alloc] initWithValue:@"afterInitialTab"];
+	options.animations.setRoot.waitForRender = [[Bool alloc] initWithBOOL:YES];
+
+	BottomTabsBaseAttacher* attacher = [[[BottomTabsAttachModeFactory alloc] initWithDefaultOptions:nil] fromOptions:options];
+	RNNBottomTabsController* tabBarController = [[RNNBottomTabsController alloc] initWithLayoutInfo:nil creator:nil options:options defaultOptions:[[RNNNavigationOptions alloc] initEmptyOptions] presenter:[RNNBasePresenter new] bottomTabPresenter:nil dotIndicatorPresenter:nil eventEmitter:_eventEmmiter childViewControllers:@[_vc1, _vc2] bottomTabsAttacher:attacher];
+
+	OCMStub([self.controllerFactory createLayout:[OCMArg any]]).andReturn(tabBarController);
+
+	[self.uut setRoot:@{} commandId:@"" completion:^{
+		XCTAssertFalse(self->_vc2.isViewLoaded);
+	}];
+
+	XCTAssertTrue(_vc1.isViewLoaded);
+	XCTAssertTrue(_vc2.isViewLoaded);
+}
+
+- (void)testMergeOptions_shouldMergeWithChildOnly {
+	[self.uut setReadyToReceiveCommands:true];
+	NSDictionary* mergeOptions = @{@"bottomTab": @{@"badge": @"Badge"}};
+	
+	RNNNavigationOptions* firstChildOptions = [RNNNavigationOptions emptyOptions];
+	firstChildOptions.bottomTab.text = [Text withValue:@"First"];
+	RNNNavigationOptions* secondChildOptions = [RNNNavigationOptions emptyOptions];
+	secondChildOptions.bottomTab.text = [Text withValue:@"Second"];
+	
+	RNNComponentViewController* firstChild = [RNNComponentViewController createWithComponentId:@"first" initialOptions:firstChildOptions];
+	RNNComponentViewController* secondChild = [RNNComponentViewController createWithComponentId:@"second" initialOptions:secondChildOptions];
+	
+	RNNBottomTabsController* tabBarController = [[RNNBottomTabsController alloc] initWithLayoutInfo:nil creator:nil options:[RNNNavigationOptions emptyOptions] defaultOptions:[[RNNNavigationOptions alloc] initEmptyOptions] presenter:[RNNBasePresenter new] bottomTabPresenter:[BottomTabPresenterCreator createWithDefaultOptions:[RNNNavigationOptions emptyOptions]] dotIndicatorPresenter:nil eventEmitter:_eventEmmiter childViewControllers:@[firstChild, secondChild] bottomTabsAttacher:nil];
+	
+	OCMStub([self.controllerFactory createLayout:[OCMArg any]]).andReturn(tabBarController);
+	[self.mainWindow setRootViewController:tabBarController];
+	[secondChild viewWillAppear:YES];
+	
+	[self.uut mergeOptions:secondChild.layoutInfo.componentId options:mergeOptions completion:^{
+		
+	}];
+	
+	XCTAssertTrue([secondChild.tabBarItem.badgeValue isEqualToString:@"Badge"]);
+	XCTAssertNil(firstChild.tabBarItem.badgeValue);
+	XCTAssertTrue([firstChild.tabBarItem.title isEqualToString:@"First"]);
+	XCTAssertTrue([secondChild.tabBarItem.title isEqualToString:@"Second"]);
+}
+
+- (void)testMergeOptions_shouldResolveTreeOptions {
+	[self.uut setReadyToReceiveCommands:true];
+	NSDictionary* mergeOptions = @{@"bottomTab": @{@"badge": @"Badge"}};
+	
+	RNNNavigationOptions* firstChildOptions = [RNNNavigationOptions emptyOptions];
+	
+	RNNNavigationOptions* secondChildOptions = [RNNNavigationOptions emptyOptions];
+	secondChildOptions.bottomTab.text = [Text withValue:@"Second"];
+	RNNNavigationOptions* stackOptions = [RNNNavigationOptions emptyOptions];
+	stackOptions.bottomTab.text = [Text withValue:@"First"];
+	
+	RNNComponentViewController* firstChild = [RNNComponentViewController createWithComponentId:@"first" initialOptions:firstChildOptions];
+	RNNStackController* stack = [[RNNStackController alloc] initWithLayoutInfo:nil creator:nil options:stackOptions defaultOptions:nil presenter:nil eventEmitter:nil childViewControllers:@[firstChild]];
+	RNNComponentViewController* secondChild = [RNNComponentViewController createWithComponentId:@"second" initialOptions:secondChildOptions];
+	
+	RNNBottomTabsController* tabBarController = [[RNNBottomTabsController alloc] initWithLayoutInfo:nil creator:nil options:[RNNNavigationOptions emptyOptions] defaultOptions:[[RNNNavigationOptions alloc] initEmptyOptions] presenter:[RNNBasePresenter new] bottomTabPresenter:[BottomTabPresenterCreator createWithDefaultOptions:[RNNNavigationOptions emptyOptions]] dotIndicatorPresenter:nil eventEmitter:_eventEmmiter childViewControllers:@[stack, secondChild] bottomTabsAttacher:nil];
+	
+	OCMStub([self.controllerFactory createLayout:[OCMArg any]]).andReturn(tabBarController);
+	[self.mainWindow setRootViewController:tabBarController];
+	[secondChild viewWillAppear:YES];
+	
+	[self.uut mergeOptions:firstChild.layoutInfo.componentId options:mergeOptions completion:^{
+
+	}];
+	
+	XCTAssertTrue([stack.tabBarItem.badgeValue isEqualToString:@"Badge"]);
+	XCTAssertTrue([stack.tabBarItem.title isEqualToString:@"First"]);
+	XCTAssertTrue([secondChild.tabBarItem.title isEqualToString:@"Second"]);
 }
 
 - (void)testShowModal_shouldShowAnimated {
@@ -360,12 +477,27 @@
 	id mockedVC = [OCMockObject partialMockForObject:self.vc1];
 	OCMStub([self.controllerFactory createLayout:[OCMArg any]]).andReturn(mockedVC);
 	
-	[[self.modalManager expect] showModal:mockedVC animated:YES hasCustomAnimation:NO completion:[OCMArg any]];
+	[[self.modalManager expect] showModal:mockedVC animated:YES completion:[OCMArg any]];
 	[self.uut showModal:@{} commandId:@"showModal" completion:^(NSString *componentId) {
 		
 	}];
 	[self.modalManager verify];
 }
 
+- (void)testPop_shouldRejectPromiseForInvalidComponentId {
+	[self.uut setReadyToReceiveCommands:true];
+	
+    XCTestExpectation *expectation = [self expectationWithDescription:@"Should invoke reject block"];
+
+	[self.uut pop:@"invalidComponentId" commandId:@"pop" mergeOptions:nil completion:^{
+		[expectation fulfill];
+	} rejection:^(NSString *code, NSString *message, NSError *error) {
+		XCTAssert([code isEqualToString:@"1012"]);
+		XCTAssert([message isEqualToString:@"Popping component failed - componentId 'invalidComponentId' not found"]);
+		[expectation fulfill];
+	}];
+	
+	[self waitForExpectationsWithTimeout:5 handler:nil];
+}
 
 @end

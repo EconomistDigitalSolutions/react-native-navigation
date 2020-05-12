@@ -1,6 +1,5 @@
 #import "UIViewController+RNNOptions.h"
 #import <React/RCTRootView.h>
-#import "UIImage+tint.h"
 #import "RNNBottomTabOptions.h"
 #import "RNNNavigationOptions.h"
 #import "RNNBackButtonOptions.h"
@@ -59,20 +58,28 @@ const NSInteger BLUR_STATUS_TAG = 78264801;
 
 - (void)setDrawBehindTopBar:(BOOL)drawBehind {
 	if (drawBehind) {
-		[self setExtendedLayoutIncludesOpaqueBars:YES];
 		self.edgesForExtendedLayout |= UIRectEdgeTop;
 	} else {
 		self.edgesForExtendedLayout &= ~UIRectEdgeTop;
 	}
+    
+    if (self.isViewLoaded) {
+        [self.view setNeedsLayout];
+        [self.view layoutIfNeeded];
+    }
 }
 
 - (void)setDrawBehindTabBar:(BOOL)drawBehindTabBar {
 	if (drawBehindTabBar) {
-		[self setExtendedLayoutIncludesOpaqueBars:YES];
 		self.edgesForExtendedLayout |= UIRectEdgeBottom;
 	} else {
 		self.edgesForExtendedLayout &= ~UIRectEdgeBottom;
 	}
+    
+    if (self.isViewLoaded) {
+        [self.view setNeedsLayout];
+        [self.view layoutIfNeeded];
+    }
 }
 
 - (void)setTabBarItemBadge:(NSString *)badge {
@@ -158,42 +165,6 @@ const NSInteger BLUR_STATUS_TAG = 78264801;
 		RCTRootView* rootView = (RCTRootView*)self.view;
 		rootView.passThroughTouches = !interceptTouchOutside;
 	}
-}
-
-- (void)setBackButtonIcon:(UIImage *)icon withColor:(UIColor *)color title:(NSString *)title {
-	UIBarButtonItem *backItem = [[UIBarButtonItem alloc] init];
-	if (icon) {
-		backItem.image = color
-		? [[icon withTintColor:color] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal]
-		: icon;
-
-		[self.navigationController.navigationBar setBackIndicatorImage:[UIImage new]];
-		[self.navigationController.navigationBar setBackIndicatorTransitionMaskImage:[UIImage new]];
-	}
-
-	UIViewController *lastViewControllerInStack = self.navigationController.viewControllers.count > 1 ? self.navigationController.viewControllers[self.navigationController.viewControllers.count - 2] : self.navigationController.topViewController;
-
-	backItem.title = title ? title : lastViewControllerInStack.navigationItem.title;
-	backItem.tintColor = color;
-
-	lastViewControllerInStack.navigationItem.backBarButtonItem = backItem;
-}
-
-- (void)applyBackButton:(RNNBackButtonOptions *)backButton {
-	UIBarButtonItem *backItem = [UIBarButtonItem new];
-	if (backButton.icon.hasValue) {
-		UIColor *color = [backButton.color getWithDefaultValue:nil];
-		backItem.image = color ?
-				[[backButton.icon.get withTintColor:color] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal] :
-				backButton.icon.get;
-
-		[self.navigationController.navigationBar setBackIndicatorImage:[UIImage new]];
-        [self.navigationController.navigationBar setBackIndicatorTransitionMaskImage:[UIImage new]];
-	}
-
-	if ([backButton.showTitle getWithDefaultValue:YES]) backItem.title = [backButton.title getWithDefaultValue:nil];
-	if (backButton.color.hasValue) backItem.tintColor = [backButton.color get];
-	self.navigationItem.backBarButtonItem = backItem;
 }
 
 @end

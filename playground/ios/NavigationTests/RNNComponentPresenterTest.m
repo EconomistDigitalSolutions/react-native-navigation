@@ -20,9 +20,9 @@
 - (void)setUp {
     [super setUp];
 	self.componentRegistry = [OCMockObject partialMockForObject:[RNNReactComponentRegistry new]];
-	self.uut = [[RNNComponentPresenter alloc] initWithComponentRegistry:self.componentRegistry:[[RNNNavigationOptions alloc] initEmptyOptions]];
+	self.uut = [[RNNComponentPresenter alloc] initWithComponentRegistry:self.componentRegistry defaultOptions:[[RNNNavigationOptions alloc] initEmptyOptions]];
 	self.boundViewController = [OCMockObject partialMockForObject:[RNNComponentViewController new]];
-	[self.uut boundViewController:self.boundViewController];
+	[self.uut bindViewController:self.boundViewController];
 	self.options = [[RNNNavigationOptions alloc] initEmptyOptions];
 }
 
@@ -73,34 +73,8 @@
 
 - (void)testBindViewControllerShouldCreateNavigationButtonsCreator {
 	RNNComponentPresenter* presenter = [[RNNComponentPresenter alloc] init];
-	[presenter boundViewController:self.boundViewController];
+	[presenter bindViewController:self.boundViewController];
 	XCTAssertNotNil(presenter.navigationButtons);
-}
-
-- (void)testApplyOptionsOnInit_shouldSetModalPresentationStyleWithDefault {
-    [(UIViewController *) [(id) self.boundViewController expect] setModalPresentationStyle:UIModalPresentationFullScreen];
-	[self.uut applyOptionsOnInit:self.options];
-	[(id)self.boundViewController verify];
-}
-
-- (void)testApplyOptionsOnInit_shouldSetModalTransitionStyleWithDefault {
-	[(UIViewController *) [(id) self.boundViewController expect] setModalTransitionStyle:UIModalTransitionStyleCoverVertical];
-	[self.uut applyOptionsOnInit:self.options];
-	[(id)self.boundViewController verify];
-}
-
-- (void)testApplyOptionsOnInit_shouldSetModalPresentationStyleWithValue {
-	self.options.modalPresentationStyle = [[Text alloc] initWithValue:@"overCurrentContext"];
-    [(UIViewController *) [(id) self.boundViewController expect] setModalPresentationStyle:UIModalPresentationOverCurrentContext];
-	[self.uut applyOptionsOnInit:self.options];
-	[(id)self.boundViewController verify];
-}
-
-- (void)testApplyOptionsOnInit_shouldSetModalTransitionStyleWithValue {
-	self.options.modalTransitionStyle = [[Text alloc] initWithValue:@"crossDissolve"];
-	[(UIViewController *) [(id) self.boundViewController expect] setModalTransitionStyle:UIModalTransitionStyleCrossDissolve];
-	[self.uut applyOptionsOnInit:self.options];
-	[(id)self.boundViewController verify];
 }
 
 -(void)testApplyOptionsOnInit_TopBarDrawUnder_true {
@@ -138,7 +112,7 @@
 - (void)testReactViewShouldBeReleasedOnDealloc {
 	RNNComponentViewController* bindViewController = [RNNComponentViewController new];
 	bindViewController.layoutInfo = [self createLayoutInfoWithComponentId:@"componentId"];
-	[self.uut boundViewController:bindViewController];
+	[self.uut bindViewController:bindViewController];
 	
 	self.options.topBar.title.component = [[RNNComponentOptions alloc] initWithDict:@{@"name": @"componentName"}];
 	
@@ -153,7 +127,7 @@
 	layoutInfo.componentId = @"componentId";
 	bindViewController.layoutInfo = layoutInfo;
 
-	[self.uut boundViewController:bindViewController];
+	[self.uut bindViewController:bindViewController];
 	XCTAssertEqual(self.uut.boundComponentId, @"componentId");
 }
 
@@ -161,11 +135,15 @@
 	RNNComponentViewController* boundViewController = [RNNComponentViewController new];
 	RNNLayoutInfo* layoutInfo = [self createLayoutInfoWithComponentId:@"componentId"];
 	boundViewController.layoutInfo = layoutInfo;
-	[self.uut boundViewController:boundViewController];
+	boundViewController.defaultOptions = [[RNNNavigationOptions alloc] initEmptyOptions];
+	[self.uut bindViewController:boundViewController];
 	
-	self.options.topBar.title.component = [[RNNComponentOptions alloc] initWithDict:@{@"name": @"titleComponent"}];
+	self.options.topBar.title.component = [[RNNComponentOptions alloc] initWithDict:@{@"name": @"titleComponent", @"componentId": @"id"}];
 	
-	[[(id)self.componentRegistry expect] createComponentIfNotExists:self.options.topBar.title.component parentComponentId:self.uut.boundComponentId reactViewReadyBlock:[OCMArg any]];
+	[[(id)self.componentRegistry expect] createComponentIfNotExists:[OCMArg checkWithBlock:^BOOL(RNNComponentOptions* options) {
+		return [options.name.get isEqual:@"titleComponent"] &&
+		[options.componentId.get isEqual:@"id"];
+	}] parentComponentId:self.uut.boundComponentId componentType:RNNComponentTypeTopBarTitle reactViewReadyBlock:[OCMArg any]];
 	[self.uut renderComponents:self.options perform:nil];
 	[(id)self.componentRegistry verify];
 	
@@ -173,40 +151,28 @@
 	XCTAssertEqual(self.uut.boundComponentId, @"componentId");
 }
 
-- (void)testApplyOptionsOnWillMoveToParent_shouldSetBackButtonOnBoundViewController_withTitle {
-	Text* title = [[Text alloc] initWithValue:@"Title"];
-	self.options.topBar.backButton.title = title;
-	[[(id) self.boundViewController expect] setBackButtonIcon:nil withColor:nil title:title.get];
-	[self.uut applyOptionsOnWillMoveToParentViewController:self.options];
-	[(id)self.boundViewController verify];
-}
-
-- (void)testApplyOptionsOnWillMoveToParent_shouldSetBackButtonOnBoundViewController_withHideTitle {
-	Text* title = [[Text alloc] initWithValue:@"Title"];
-	self.options.topBar.backButton.title = title;
-	self.options.topBar.backButton.showTitle = [[Bool alloc] initWithValue:@(0)];
-	[[(id) self.boundViewController expect] setBackButtonIcon:nil withColor:nil title:@""];
-	[self.uut applyOptionsOnWillMoveToParentViewController:self.options];
-	[(id)self.boundViewController verify];
-}
-
-- (void)testApplyOptionsOnWillMoveToParent_shouldSetBackButtonOnBoundViewController_withIcon {
-	Image* image = [[Image alloc] initWithValue:[UIImage new]];
-	self.options.topBar.backButton.icon = image;
-	[[(id) self.boundViewController expect] setBackButtonIcon:image.get withColor:nil title:nil];
-	[self.uut applyOptionsOnWillMoveToParentViewController:self.options];
-	[(id)self.boundViewController verify];
-}
-
-- (void)testApplyOptionsOnWillMoveToParent_shouldSetBackButtonOnBoundViewController_withDefaultValues {
-	[[(id) self.boundViewController expect] setBackButtonIcon:nil withColor:nil title:nil];
-	[self.uut applyOptionsOnWillMoveToParentViewController:self.options];
-	[(id)self.boundViewController verify];
+- (void)testRenderComponentsCreateReactViewFromDefaultOptions {
+	RNNComponentViewController* boundViewController = [RNNComponentViewController new];
+	boundViewController.layoutInfo = [self createLayoutInfoWithComponentId:@"componentId"];
+	self.uut.defaultOptions = [[RNNNavigationOptions alloc] initEmptyOptions];
+	[self.uut bindViewController:boundViewController];
+	
+	self.uut.defaultOptions.topBar.title.component = [[RNNComponentOptions alloc] initWithDict:@{@"name": @"titleComponent", @"componentId": @"id"}];
+	
+	[[(id)self.componentRegistry expect] createComponentIfNotExists:[OCMArg checkWithBlock:^BOOL(RNNComponentOptions* options) {
+		return [options.name.get isEqual:@"titleComponent"] &&
+		[options.componentId.get isEqual:@"id"];
+	}] parentComponentId:self.uut.boundComponentId componentType:RNNComponentTypeTopBarTitle reactViewReadyBlock:[OCMArg any]];
+	[self.uut renderComponents:self.options perform:nil];
+	[(id)self.componentRegistry verify];
+	
+	
+	XCTAssertEqual(self.uut.boundComponentId, @"componentId");
 }
 
 - (void)testRemoveTitleComponentIfNeeded_componentIsRemovedIfTitleTextIsDefined {
-	id mockTitle = [OCMockObject niceMockForClass:[RNNReactView class]];
-    OCMStub([self.componentRegistry createComponentIfNotExists:[OCMArg any] parentComponentId:[OCMArg any] reactViewReadyBlock:nil]).andReturn(mockTitle);
+	id mockTitle = [OCMockObject niceMockForClass:[RNNReactTitleView class]];
+    OCMStub([self.componentRegistry createComponentIfNotExists:[OCMArg any] parentComponentId:[OCMArg any] componentType:RNNComponentTypeTopBarTitle reactViewReadyBlock:nil]).andReturn(mockTitle);
 
 	RNNComponentOptions* component = [RNNComponentOptions new];
 	component.name = [[Text alloc] initWithValue:@"componentName"];
@@ -226,8 +192,8 @@
 }
 
 - (void)testRemoveTitleComponentIfNeeded_componentIsNotRemovedIfMergeOptionsIsCalledWithoutTitleText {
-    id mockTitle = [OCMockObject niceMockForClass:[RNNReactView class]];
-    OCMStub([self.componentRegistry createComponentIfNotExists:[OCMArg any] parentComponentId:[OCMArg any] reactViewReadyBlock:nil]).andReturn(mockTitle);
+    id mockTitle = [OCMockObject niceMockForClass:[RNNReactTitleView class]];
+    OCMStub([self.componentRegistry createComponentIfNotExists:[OCMArg any] parentComponentId:[OCMArg any]  componentType:RNNComponentTypeTopBarTitle reactViewReadyBlock:nil]).andReturn(mockTitle);
 
     RNNComponentOptions* component = [RNNComponentOptions new];
     component.name = [[Text alloc] initWithValue:@"componentName"];
