@@ -26,6 +26,7 @@ import com.reactnativenavigation.views.topbar.TopBar;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Objects;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.RestrictTo;
@@ -144,6 +145,9 @@ public class StackController extends ParentController<StackLayout> {
 
     public void push(ViewController child, CommandListener listener) {
         final ViewController toRemove = stack.peek();
+        if (toRemove != null && child != null && Objects.equals(child.getId(), toRemove.getId())){
+            return;
+        }
         if (size() > 0) backButtonHelper.addToPushedChild(child);
         child.setParentController(this);
         stack.push(child.getId(), child);
