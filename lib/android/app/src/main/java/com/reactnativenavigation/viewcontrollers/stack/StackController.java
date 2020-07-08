@@ -144,39 +144,40 @@ public class StackController extends ParentController<StackLayout> {
     }
 
     public void push(ViewController child, CommandListener listener) {
-        final ViewController toRemove = stack.peek();
-        if (toRemove != null && child != null && Objects.equals(child.getId(), toRemove.getId())){
-            return;
-        }
-        if (size() > 0) backButtonHelper.addToPushedChild(child);
-        child.setParentController(this);
-        stack.push(child.getId(), child);
-        Options resolvedOptions = resolveCurrentOptions(presenter.getDefaultOptions());
-        addChildToStack(child, child.getView(), resolvedOptions);
-
-        if (toRemove != null) {
-            if (resolvedOptions.animations.push.enabled.isTrueOrUndefined()) {
-                if (resolvedOptions.animations.push.waitForRender.isTrue()) {
-                    child.getView().setAlpha(0);
-                    child.addOnAppearedListener(() -> animator.push(child.getView(), resolvedOptions.animations.push, resolvedOptions.transitions, toRemove.getElements(), child.getElements(), () -> {
-                        getView().removeView(toRemove.getView());
-                        listener.onSuccess(child.getId());
-                    }));
-                } else {
-                    animator.push(child.getView(), resolvedOptions.animations.push, () -> {
-                        if (!toRemove.equals(peek())) {
-                            getView().removeView(toRemove.getView());
-                        }
-                        listener.onSuccess(child.getId());
-                    });
-                }
-            } else {
-                getView().removeView(toRemove.getView());
-                listener.onSuccess(child.getId());
-            }
-        } else {
-            listener.onSuccess(child.getId());
-        }
+        throw new RuntimeException("Stack test exception");
+//        final ViewController toRemove = stack.peek();
+//        if (toRemove != null && child != null && Objects.equals(child.getId(), toRemove.getId())){
+//            return;
+//        }
+//        if (size() > 0) backButtonHelper.addToPushedChild(child);
+//        child.setParentController(this);
+//        stack.push(child.getId(), child);
+//        Options resolvedOptions = resolveCurrentOptions(presenter.getDefaultOptions());
+//        addChildToStack(child, child.getView(), resolvedOptions);
+//
+//        if (toRemove != null) {
+//            if (resolvedOptions.animations.push.enabled.isTrueOrUndefined()) {
+//                if (resolvedOptions.animations.push.waitForRender.isTrue()) {
+//                    child.getView().setAlpha(0);
+//                    child.addOnAppearedListener(() -> animator.push(child.getView(), resolvedOptions.animations.push, resolvedOptions.transitions, toRemove.getElements(), child.getElements(), () -> {
+//                        getView().removeView(toRemove.getView());
+//                        listener.onSuccess(child.getId());
+//                    }));
+//                } else {
+//                    animator.push(child.getView(), resolvedOptions.animations.push, () -> {
+//                        if (!toRemove.equals(peek())) {
+//                            getView().removeView(toRemove.getView());
+//                        }
+//                        listener.onSuccess(child.getId());
+//                    });
+//                }
+//            } else {
+//                getView().removeView(toRemove.getView());
+//                listener.onSuccess(child.getId());
+//            }
+//        } else {
+//            listener.onSuccess(child.getId());
+//        }
     }
 
     private void addChildToStack(ViewController child, View view, Options resolvedOptions) {
