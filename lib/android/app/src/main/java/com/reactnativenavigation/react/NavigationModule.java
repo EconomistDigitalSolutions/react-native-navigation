@@ -193,12 +193,15 @@ public class NavigationModule extends ReactContextBaseJavaModule {
                null ? Options.EMPTY : Options.parse(new TypefaceLoader(activity()), jsonParser.parse(mergeOptions));
     }
 
-    private void handle(Runnable task) {
-        if (activity() == null || activity().isFinishing()) return;
-        UiThread.post(task);
+    protected void handle(Runnable task) {
+        UiThread.post(() -> {
+            if (getCurrentActivity() != null && !activity().isFinishing()) {
+                task.run();
+            }
+        });
     }
 
-    private NavigationActivity activity() {
+    protected NavigationActivity activity() {
         return (NavigationActivity) getCurrentActivity();
     }
 
